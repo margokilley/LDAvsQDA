@@ -1,0 +1,130 @@
+---
+title: "Margo Killey"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+Loading libraries and data required for this HW. 
+```{r}
+library(MASS)
+library(ISLR)
+data(Auto)
+library(dplyr)
+```
+2.a)
+Creating my new variable mpg01 and adding it to the Auto dataset. 
+```{r}
+mpg01 <- c()
+
+range_i <- length(Auto$mpg)
+
+for(i in 1:range_i) {
+  if(Auto$mpg[i] >= 25){
+    mpg01[i] = 1
+  } else {
+    mpg01[i] = 0
+  }
+}
+
+Auto <- mutate(Auto, mpg01)
+```
+
+2.b) Going to create some exploratory plots to look at associations between mpg01 and other variables. 
+
+```{r}
+par(mfrow = c(2, 3))
+boxplot(Auto$weight ~ Auto$mpg01)
+boxplot(Auto$acceleration ~ Auto$mpg01)
+boxplot(Auto$year ~ Auto$mpg01)
+boxplot(Auto$horsepower ~ Auto$mpg01)
+boxplot(Auto$displacement ~ Auto$mpg01)
+v = c(2, 3, 4, 5, 6, 7)
+pairs(Auto[v], col = c("blue", "green")[Auto$mpg01 + 1])
+```
+From the box plots combined with the pairs graphs, I believe that the best variables to test will be weight (seems lower weight means higher mpg), horsepower (high horsepower looks to mean lower mpg), displacement (low displacement seems to mean higher mpg), and year (mean for <25 around 74, mean for >= 25 about 79 in boxplot).
+Now I'm going to split the data into a training set and a test set. Randomly selecting 80% of the observations from each class. 
+```{r}
+set.seed(123)
+mpg_over25 = which(Auto$mpg01 == 1)
+mpg_under25 = which(Auto$mpg01 == 0)
+
+train_id <- c(sample(mpg_over25, size = floor(0.80 * length(mpg_over25))), 
+              sample(mpg_under25, size = floor(0.80 * length(mpg_under25))))
+
+Auto_train = Auto[train_id,]
+Auto_test = Auto[-train_id,]
+table(Auto_train$mpg01)
+table(Auto_test$mpg01)
+```
+
+2.d) Going to perform LDA on the training data to predict mpg01 using weight, year, horsepower, and displacement. 
+Reporting test and training errors, making plot of training data points. 
+```{r}
+Auto_lda = lda(mpg01 ~ weight + year + horsepower + displacement, data = Auto_train)
+Auto_lda
+
+head(predict(Auto_lda, Auto_train)$class, n = 9)
+head(predict(Auto_lda, Auto_train)$posterior, n = 9)
+
+Auto_lda_train_pred = predict(Auto_lda, Auto_train)$class
+Auto_lda_test_pred = predict(Auto_lda, Auto_test)$class
+
+Auto_lda_train_err = mean(Auto_lda_train_pred != Auto_train$mpg01)
+Auto_lda_test_err = mean(Auto_lda_test_pred != Auto_test$mpg01)
+
+print(Auto_lda_train_err)
+print(Auto_lda_test_err)
+
+table(predicted = Auto_lda_test_pred, actual = Auto_test$mpg01)
+```
+From the table above, we see that in my LDA, I predicted 0 when it was actually 0 39 times, predicted 0 when it was actually 1 once, predicted 1 when it was actually 1 33 times, and predicted 0 when it was actually 1 7 times, so I predicted incorrectly 8 times out of 80, which is reflected in a training error of 10%. 
+As you can see, my training error is ~0.122 and my testing error is 0.1
+
+Now I'm going to plot my training points for weight and horsepower, because in my boxplots/pairs graphs I think those look like they are most associated with mpg. This is because in my pairs scatterplot with those variables, it looks like I can physically draw a straight boundary between them, and they have very different means for mpg01 = 0 and mpg01 = 1. Going to color code mpg class 0 vs. mpg class 1, and shape code between predicted and actual values of Y. 
+```{r}
+plot(Auto_train$weight, Auto_train$horsepower, 
+     col = c("blue", "green")[Auto_train$mpg01 + 1], 
+     xlab = "Weight", ylab = "Horsepower", 
+     main = "True class vs. Predicted class by LDA")
+
+
+points(Auto_train$weight, Auto_train$horsepower, 
+       pch = c(2, 3)[Auto_lda_train_pred])
+
+
+legend("bottomright", c("true mpg < 25", "true mpg >= 25", "pred mpg < 25", "pred mpg >= 25"), col = c("blue", "green", "black", "black"), pch = c(1, 1, 2, 3))
+
+```
+
+2.e) Now going to perform QDA on my training data to predict mpg01 using the same varaibles I used in d). 
+
+```{r}
+Auto_qda <- qda(mpg01 ~ weight + year + horsepower + displacement, data = Auto_train)
+Auto_qda
+
+Auto_qda_train_pred = predict(Auto_qda, Auto_train)$class
+Auto_qda_test_pred = predict(Auto_qda, Auto_test)$class
+
+Auto_qda_train_err = mean(Auto_qda_train_pred != Auto_train$mpg01)
+Auto_qda_test_err = mean(Auto_qda_test_pred != Auto_test$mpg01)
+
+Auto_qda_train_err
+Auto_qda_test_err
+```
+
+Also am going to do the same plot I did in d), but with my QDA predicted data. 
+```{r}
+plot(Auto_train$weight, Auto_train$horsepower, 
+     col = c("blue", "green")[Auto_train$mpg01 + 1], 
+     xlab = "Weight", ylab = "Horsepower", 
+     main = "True class vs. Predicted class by QDA")
+
+points(Auto_train$weight, Auto_train$horsepower, 
+       pch = c(2, 3)[Auto_qda_train_pred])
+
+legend("bottomright", c("true mpg < 25", "true mpg >= 25", "pred mpg < 25", "pred mpg >= 25"), col = c("blue", "green", "black", "black"), pch = c(1, 1, 2, 3))
+
+```
+
+2.f) My training and testing error was higher in my QDA model than my LDA model, meaning that it didn't do as good of a job predicting Y as the LDA model did. Since LDA did a better job at predicting Y and LDA uses a pooled covariance, this means that each class has a similar covariance structure so we can pool the covariances into one common pooled covariance. 
